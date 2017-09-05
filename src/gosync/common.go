@@ -3,13 +3,14 @@ package main
 import (
     "bufio"
     "encoding/binary"
-    "errors"
     "fmt"
     "io"
     "net/http"
     "net/url"
     "os"
 
+    log "github.com/Sirupsen/logrus"
+    "github.com/pkg/errors"
     "github.com/Redundancy/go-sync/chunks"
     "github.com/Redundancy/go-sync/comparer"
     "github.com/Redundancy/go-sync/filechecksum"
@@ -83,8 +84,7 @@ func formatFileError(filename string, err error) error {
 }
 
 func handleFileError(filename string, err error) {
-    e := formatFileError(filename, err)
-    fmt.Fprintln(os.Stderr, e)
+    log.Error(errors.WithStack(formatFileError(filename, err)).Error())
 }
 
 func getLocalOrRemoteFile(path string) (io.ReadCloser, error) {
@@ -136,28 +136,33 @@ func toPatcherMissingSpan(sl comparer.BlockSpanList, blockSize int64) []patcher.
 }
 
 func writeHeaders(
-    f *os.File,
-    magic string,
-    blocksize uint32,
-    filesize int64,
-    versions []uint16,
-) (err error) {
-    if _, err = f.WriteString(magicString); err != nil {
-        return
+    f           *os.File,
+    filesize    int64,
+    blocksize   uint32,
+    blockCount  uint32,
+    rootHash    []byte,
+) error {
+    if _, err := f.WriteString(magicString); err != nil {
+        return errors.WithStack(err)
     }
-
-    for _, v := range versions {
-        if err = binary.Write(f, binary.LittleEndian, v); err != nil {
-            return
+    for _, v := range []uint16{majorVersion, minorVersion, patchVersion} {
+        if err := binary.Write(f, binary.LittleEndian, v); err != nil {
+            return errors.WithStack(err)
         }
     }
-
-    if err = binary.Write(f, binary.LittleEndian, filesize); err != nil {
-        return
+    if err := binary.Write(f, binary.LittleEndian, filesize); err != nil {
+        return errors.WithStack(err)
     }
-
-    err = binary.Write(f, binary.LittleEndian, blocksize)
-    return
+    if err := binary.Write(f, binary.LittleEndian, blocksize); err != nil {
+        return errors.WithStack(err)
+    }
+    if err := binary.Write(f, binary.LittleEndian, blockCount); err != nil {
+        return errors.WithStack(err)
+    }
+    if err := binary.Write(f, binary.LittleEndian, rootHash); err != nil {
+        return errors.WithStack(err)
+    }
+    return nil
 }
 
 // reads the file headers and checks the magic string, then the semantic versioning

@@ -1,11 +1,13 @@
 package main
 
 import (
-    "fmt"
+    "bytes"
     "os"
     "path/filepath"
     "time"
 
+    log "github.com/Sirupsen/logrus"
+    "github.com/pkg/errors"
     "github.com/Redundancy/go-sync/filechecksum"
     "github.com/codegangsta/cli"
 )
@@ -30,11 +32,14 @@ func init() {
 }
 
 func Build(c *cli.Context) {
-    filename := c.Args()[0]
-    blocksize := uint32(c.Int("blocksize"))
-    generator := filechecksum.NewFileChecksumGenerator(uint(blocksize))
-    inputFile, err := os.Open(filename)
+    log.SetLevel(log.DebugLevel)
+    var (
+        filename  = c.Args()[0]
+        blocksize = uint32(c.Int("blocksize"))
+        generator = filechecksum.NewFileChecksumGenerator(uint(blocksize))
+    )
 
+    inputFile, err := os.Open(filename)
     if err != nil {
         absInputPath, err2 := filepath.Abs(filename)
         if err2 == nil {
@@ -46,69 +51,65 @@ func Build(c *cli.Context) {
         os.Exit(1)
     }
 
-    s, _ := inputFile.Stat()
-    // TODO: Error?
-    file_size := s.Size()
+    stat, err := inputFile.Stat()
+    if err != nil {
+        log.Error(errors.WithStack(err).Error())
+        os.Exit(1)
+    }
+    file_size := stat.Size()
 
     defer inputFile.Close()
 
-    ext := filepath.Ext(filename)
-    outfilePath := filename[:len(filename)-len(ext)] + ".gosync"
-    outputFile, err := os.Create(outfilePath)
+    var (
+        ext = filepath.Ext(filename)
+        outfilePath = filename[:len(filename)-len(ext)] + ".gosync"
+        outBuf = new(bytes.Buffer)
+    )
 
+    start := time.Now()
+    rtcs, blockCount, err := generator.BuildSequentialAndRootChecksum(inputFile, outBuf)
+    end := time.Now()
+    if err != nil {
+        log.Error(errors.WithMessage(err, "Error generating checksum from " + filename).Error())
+        os.Exit(1)
+    }
+
+    outputFile, err := os.Create(outfilePath)
     if err != nil {
         handleFileError(outfilePath, err)
         os.Exit(1)
     }
-
     defer outputFile.Close()
 
     if err = writeHeaders(
         outputFile,
-        magicString,
-        blocksize,
         file_size,
-        []uint16{majorVersion, minorVersion, patchVersion},
+        blocksize,
+        blockCount,
+        rtcs,
     ); err != nil {
-        fmt.Fprintf(
-            os.Stderr,
-            "Error getting file info: %v\n",
-            filename,
-            err,
-        )
+        log.Error(errors.WithMessage(err, "Error getting file info:" + filename).Error())
         os.Exit(2)
     }
 
-    start := time.Now()
-    _, err = generator.GenerateChecksums(inputFile, outputFile)
-    end := time.Now()
-
+    wrLen, err := outputFile.Write(outBuf.Bytes())
     if err != nil {
-        fmt.Fprintf(
-            os.Stderr,
-            "Error generating checksum: %v\n",
-            filename,
-            err,
-        )
+        log.Error(errors.WithMessage(err, "Error saving checksum :" + filename).Error())
+        os.Exit(2)
+    }
+    if wrLen != outBuf.Len() {
+        log.Error(errors.Errorf("Error saving checksum to file: checksum length %v vs written %v", outBuf.Len(), wrLen).Error())
         os.Exit(2)
     }
 
     inputFileInfo, err := os.Stat(filename)
     if err != nil {
-        fmt.Fprintf(
-            os.Stderr,
-            "Error getting file info: %v\n",
-            filename,
-            err,
-        )
+        log.Error(errors.WithMessage(err, "Error getting file info:" + filename).Error())
         os.Exit(2)
     }
 
-    fmt.Fprintf(
-        os.Stderr,
-        "Index for %v file generated in %v (%v bytes/S)\n",
+    log.Infof("Index for %v file generated in %v (%v bytes/S)\n",
         inputFileInfo.Size(),
         end.Sub(start),
-        float64(inputFileInfo.Size())/end.Sub(start).Seconds(),
-    )
+        float64(inputFileInfo.Size())/end.Sub(start).Seconds())
 }
