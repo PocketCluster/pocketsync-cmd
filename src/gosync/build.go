@@ -8,6 +8,7 @@ import (
 
     log "github.com/Sirupsen/logrus"
     "github.com/pkg/errors"
+    gosync "github.com/Redundancy/go-sync"
     "github.com/Redundancy/go-sync/filechecksum"
     "github.com/codegangsta/cli"
 )
@@ -23,7 +24,7 @@ func init() {
             Flags: []cli.Flag{
                 cli.IntFlag{
                     Name:  "blocksize",
-                    Value: DefaultBlockSize,
+                    Value: gosync.PocketSyncDefaultBlockSize,
                     Usage: "The block size to use for the gosync file",
                 },
             },

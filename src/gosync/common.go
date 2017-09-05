@@ -11,6 +11,7 @@ import (
 
     log "github.com/Sirupsen/logrus"
     "github.com/pkg/errors"
+    gosync "github.com/Redundancy/go-sync"
     "github.com/Redundancy/go-sync/chunks"
     "github.com/Redundancy/go-sync/comparer"
     "github.com/Redundancy/go-sync/filechecksum"
@@ -134,10 +135,10 @@ func writeHeaders(
     blockcount uint32,
     rootHash   []byte,
 ) error {
-    if _, err := f.WriteString(magicString); err != nil {
+    if _, err := f.WriteString(gosync.PocketSyncMagicString); err != nil {
         return errors.WithStack(err)
     }
-    for _, v := range []uint16{majorVersion, minorVersion, patchVersion} {
+    for _, v := range []uint16{gosync.PocketSyncMajorVersion, gosync.PocketSyncMinorVersion, gosync.PocketSyncPatchVersion} {
         if err := binary.Write(f, binary.LittleEndian, v); err != nil {
             return errors.WithStack(err)
         }
@@ -165,7 +166,7 @@ func writeHeaders(
 // return : in order of 'filesize', 'blocksize', 'blockcount', 'rootHash', 'error'
 func readHeadersAndCheck(r io.Reader) (int64, uint32, uint32, []byte, error) {
     var (
-        bMagic                []byte = make([]byte, len(magicString))
+        bMagic                []byte = make([]byte, len(gosync.PocketSyncMagicString))
         major, minor, patch   uint16 = 0, 0, 0
         filesize              int64  = 0
         blocksize, blockcount uint32 = 0, 0
@@ -175,7 +176,7 @@ func readHeadersAndCheck(r io.Reader) (int64, uint32, uint32, []byte, error) {
     // magic string
     if _, err := r.Read(bMagic); err != nil {
         return 0, 0, 0, nil, errors.WithStack(err)
-    } else if string(bMagic) != magicString {
+    } else if string(bMagic) != gosync.PocketSyncMagicString {
         return 0, 0, 0, nil, errors.New("meta header does not confirm. Not a valid meta")
     }
 
@@ -185,10 +186,10 @@ func readHeadersAndCheck(r io.Reader) (int64, uint32, uint32, []byte, error) {
             return 0, 0, 0, nil, errors.WithStack(err)
         }
     }
-    if major != majorVersion || minor != minorVersion || patch != patchVersion {
+    if major != gosync.PocketSyncMajorVersion || minor != gosync.PocketSyncMinorVersion || patch != gosync.PocketSyncPatchVersion {
         return 0, 0, 0, nil, errors.Errorf("The acquired version (%v.%v.%v) does not match the tool (%v.%v.%v).",
             major, minor, patch,
-            majorVersion, minorVersion, patchVersion)
+            gosync.PocketSyncMajorVersion, gosync.PocketSyncMinorVersion, gosync.PocketSyncPatchVersion)
     }
 
     if err := binary.Read(r, binary.LittleEndian, &filesize); err != nil {
