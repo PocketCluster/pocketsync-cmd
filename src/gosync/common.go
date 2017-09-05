@@ -218,8 +218,8 @@ func readIndex(r io.Reader, blocksize uint) (
 
 	readChunks, e := chunks.LoadChecksumsFromReader(
 		r,
-		generator.WeakRollingHash.Size(),
-		generator.StrongHash.Size(),
+		generator.GetWeakRollingHash().Size(),
+		generator.GetStrongHash().Size(),
 	)
 
 	err = e
