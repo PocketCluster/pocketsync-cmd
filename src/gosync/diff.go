@@ -6,6 +6,8 @@ import (
     "runtime"
     "time"
 
+    log "github.com/Sirupsen/logrus"
+    "github.com/pkg/errors"
     "github.com/codegangsta/cli"
 )
 
@@ -30,60 +32,49 @@ func init() {
 }
 
 func Diff(c *cli.Context) {
-    localFilename := c.Args()[0]
-    referenceFilename := c.Args()[1]
-    startTime := time.Now()
+    var (
+        localFilename     string = c.Args()[0]
+        referenceFilename string = c.Args()[1]
+        startTime      time.Time = time.Now()
+    )
 
     localFile := openFileAndHandleError(localFilename)
-
     if localFile == nil {
         os.Exit(1)
     }
-
     defer localFile.Close()
 
-    var blocksize uint32
     referenceFile := openFileAndHandleError(referenceFilename)
-
     if referenceFile == nil {
         os.Exit(1)
     }
-
     defer referenceFile.Close()
 
-    _, _, _, _, blocksize, e := readHeadersAndCheck(
-        referenceFile,
-        magicString,
-        majorVersion,
-    )
-
-    if e != nil {
-        fmt.Printf("Error loading index: %v", e)
+    _, blocksize, blockcount, rootHash, err := readHeadersAndCheck(referenceFile)
+    if err != nil {
+        log.Errorf(errors.WithMessage(err, "Error loading index").Error())
         os.Exit(1)
     }
 
-    fmt.Println("Blocksize: ", blocksize)
-
-    index, _, _, err := readIndex(referenceFile, uint(blocksize))
+    log.Println("Blocksize: ", blocksize)
+    index, _, err := readIndex(referenceFile, uint(blocksize), uint(blockcount), rootHash)
     referenceFile.Close()
-
     if err != nil {
-        return
-    }
-
-    fmt.Println("Weak hash count:", index.WeakCount())
-
-    fi, err := localFile.Stat()
-
-    if err != nil {
-        fmt.Println("Could not get info on file:", err)
+        log.Errorf(errors.WithStack(err).Error())
         os.Exit(1)
     }
 
-    num_matchers := int64(c.Int("p"))
+    log.Println("Weak hash count:", index.WeakCount())
+    fi, err := localFile.Stat()
+    if err != nil {
+        log.Errorf(errors.WithMessage(err, "Could not get info on file:").Error())
+        os.Exit(1)
+    }
 
-    localFile_size := fi.Size()
-
+    var (
+        num_matchers   = int64(c.Int("p"))
+        localFile_size = fi.Size()
+    )
     // Don't split up small files
     if localFile_size < 1024*1024 {
         num_matchers = 1

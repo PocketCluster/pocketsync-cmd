@@ -1,10 +1,11 @@
 package main
 
 import (
-    "fmt"
     "os"
     "runtime"
 
+    log "github.com/Sirupsen/logrus"
+    "github.com/pkg/errors"
     gosync_main "github.com/Redundancy/go-sync"
     "github.com/codegangsta/cli"
 )
@@ -40,66 +41,59 @@ The index should be produced by "gosync build".
 func Patch(c *cli.Context) {
     errorWrapper(c, func(c *cli.Context) error {
 
-        fmt.Fprintln(os.Stderr, "Starting patching process")
-
+        log.Println("Starting patching process")
         if l := len(c.Args()); l < 3 || l > 4 {
-            return fmt.Errorf(
-                "Usage is \"%v\" (invalid number of arguments)",
-                usage,
-            )
+            return errors.Errorf("Usage is \"%v\" (invalid number of arguments)", usage)
         }
 
-        localFilename := c.Args()[0]
-        summaryFile := c.Args()[1]
-        referencePath := c.Args()[2]
-
-        outFilename := localFilename
+        var (
+            localFilename = c.Args()[0]
+            outFilename   = c.Args()[0]
+            summaryFile   = c.Args()[1]
+            referencePath = c.Args()[2]
+        )
         if len(c.Args()) == 4 {
             outFilename = c.Args()[3]
         }
 
-        indexReader, e := os.Open(summaryFile)
-        if e != nil {
-            return e
+        indexReader, err := os.Open(summaryFile)
+        if err != nil {
+            return errors.WithStack(err)
         }
         defer indexReader.Close()
 
-        _, _, _, filesize, blocksize, e := readHeadersAndCheck(
-            indexReader,
-            magicString,
-            majorVersion,
-        )
+        filesize, blocksize, blockcount, rootHash, err := readHeadersAndCheck(indexReader)
+        if err != nil {
+            return errors.WithStack(err)
+        }
 
-        index, checksumLookup, blockCount, err := readIndex(
-            indexReader,
-            uint(blocksize),
-        )
+        index, checksumLookup, err := readIndex(indexReader, uint(blocksize), uint(blockcount), rootHash)
+        if err != nil {
+            return errors.WithStack(err)
+        }
 
         fs := &gosync_main.BasicSummary{
             ChecksumIndex:  index,
             ChecksumLookup: checksumLookup,
-            BlockCount:     blockCount,
+            BlockCount:     uint(blockcount),
             BlockSize:      uint(blocksize),
             FileSize:       filesize,
         }
-
         rsync, err := gosync_main.MakeRSync(
             localFilename,
             referencePath,
             outFilename,
             fs,
         )
-
         if err != nil {
-            return err
+            return errors.WithStack(err)
         }
 
         err = rsync.Patch()
-
         if err != nil {
-            return err
+            return errors.WithStack(err)
         }
 
-        return rsync.Close()
+        return errors.WithStack(rsync.Close())
     })
 }

@@ -2,8 +2,8 @@ package main
 
 import (
     "bufio"
+    "bytes"
     "encoding/binary"
-    "fmt"
     "io"
     "net/http"
     "net/url"
@@ -29,13 +29,13 @@ const (
 func errorWrapper(c *cli.Context, f func(*cli.Context) error) {
     defer func() {
         if p := recover(); p != nil {
-            fmt.Fprintln(os.Stderr, p)
+            log.Errorf("%v", p)
             os.Exit(1)
         }
     }()
 
     if err := f(c); err != nil {
-        fmt.Fprintln(os.Stderr, err.Error())
+        log.Errorf(err.Error())
         os.Exit(1)
     }
 
@@ -57,29 +57,21 @@ func openFileAndHandleError(filename string) (f *os.File) {
 func formatFileError(filename string, err error) error {
     switch {
     case os.IsExist(err):
-        return fmt.Errorf(
+        return errors.Errorf(
             "Could not open %v (already exists): %v",
-            filename,
-            err,
-        )
+            filename, err)
     case os.IsNotExist(err):
-        return fmt.Errorf(
+        return errors.Errorf(
             "Could not find %v: %v\n",
-            filename,
-            err,
-        )
+            filename, err)
     case os.IsPermission(err):
-        return fmt.Errorf(
+        return errors.Errorf(
             "Could not open %v (permission denied): %v\n",
-            filename,
-            err,
-        )
+            filename, err)
     default:
-        return fmt.Errorf(
+        return errors.Errorf(
             "Unknown error opening %v: %v\n",
-            filename,
-            err,
-        )
+            filename, err)
     }
 }
 
@@ -103,7 +95,7 @@ func getLocalOrRemoteFile(path string) (io.ReadCloser, error) {
         }
 
         if response.StatusCode < 200 || response.StatusCode > 299 {
-            return nil, fmt.Errorf("Request to %v returned status: %v", path, response.Status)
+            return nil, errors.Errorf("Request to %v returned status: %v", path, response.Status)
         }
 
         return response.Body, nil
@@ -136,11 +128,11 @@ func toPatcherMissingSpan(sl comparer.BlockSpanList, blockSize int64) []patcher.
 }
 
 func writeHeaders(
-    f           *os.File,
-    filesize    int64,
-    blocksize   uint32,
-    blockCount  uint32,
-    rootHash    []byte,
+    f          *os.File,
+    filesize   int64,
+    blocksize  uint32,
+    blockcount uint32,
+    rootHash   []byte,
 ) error {
     if _, err := f.WriteString(magicString); err != nil {
         return errors.WithStack(err)
@@ -156,7 +148,11 @@ func writeHeaders(
     if err := binary.Write(f, binary.LittleEndian, blocksize); err != nil {
         return errors.WithStack(err)
     }
-    if err := binary.Write(f, binary.LittleEndian, blockCount); err != nil {
+    if err := binary.Write(f, binary.LittleEndian, blockcount); err != nil {
+        return errors.WithStack(err)
+    }
+    var hLen uint32 = uint32(len(rootHash))
+    if err := binary.Write(f, binary.LittleEndian, hLen); err != nil {
         return errors.WithStack(err)
     }
     if err := binary.Write(f, binary.LittleEndian, rootHash); err != nil {
@@ -166,86 +162,90 @@ func writeHeaders(
 }
 
 // reads the file headers and checks the magic string, then the semantic versioning
-func readHeadersAndCheck(
-    r io.Reader,
-    magic string,
-    requiredMajorVersion uint16,
-) (
-    major, minor, patch uint16,
-    filesize int64,
-    blocksize uint32,
-    err error,
-) {
-    b := make([]byte, len(magicString))
-
-    if _, err = r.Read(b); err != nil {
-        return
-    } else if string(b) != magicString {
-        err = errors.New(
-            "file header does not match magic string. Not a valid gosync file",
-        )
-        return
+// return : in order of 'filesize', 'blocksize', 'blockcount', 'rootHash', 'error'
+func readHeadersAndCheck(r io.Reader) (int64, uint32, uint32, []byte, error) {
+    var (
+        bMagic                []byte = make([]byte, len(magicString))
+        major, minor, patch   uint16 = 0, 0, 0
+        filesize              int64  = 0
+        blocksize, blockcount uint32 = 0, 0
+        hLen                  uint32 = 0
+        rootHash              []byte = nil
+    )
+    // magic string
+    if _, err := r.Read(bMagic); err != nil {
+        return 0, 0, 0, nil, errors.WithStack(err)
+    } else if string(bMagic) != magicString {
+        return 0, 0, 0, nil, errors.New("meta header does not confirm. Not a valid meta")
     }
 
+    // version
     for _, v := range []*uint16{&major, &minor, &patch} {
-        err = binary.Read(r, binary.LittleEndian, v)
-        if err != nil {
-            return
+        if err := binary.Read(r, binary.LittleEndian, v); err != nil {
+            return 0, 0, 0, nil, errors.WithStack(err)
         }
     }
-
-    if requiredMajorVersion != major {
-        err = fmt.Errorf(
-            "The major version of the gosync file (%v.%v.%v) does not match the tool (%v.%v.%v).",
+    if major != majorVersion || minor != minorVersion || patch != patchVersion {
+        return 0, 0, 0, nil, errors.Errorf("The acquired version (%v.%v.%v) does not match the tool (%v.%v.%v).",
             major, minor, patch,
-            majorVersion, minorVersion, patchVersion,
-        )
-
-        return
+            majorVersion, minorVersion, patchVersion)
     }
 
-    err = binary.Read(r, binary.LittleEndian, &filesize)
-    if err != nil {
-        return
+    if err := binary.Read(r, binary.LittleEndian, &filesize); err != nil {
+        return 0, 0, 0, nil, errors.WithStack(err)
     }
-
-    err = binary.Read(r, binary.LittleEndian, &blocksize)
-    return
+    if err := binary.Read(r, binary.LittleEndian, &blocksize); err != nil {
+        return 0, 0, 0, nil, errors.WithStack(err)
+    }
+    if err := binary.Read(r, binary.LittleEndian, &blockcount); err != nil {
+        return 0, 0, 0, nil, errors.WithStack(err)
+    }
+    if err := binary.Read(r, binary.LittleEndian, &hLen); err != nil {
+        return 0, 0, 0, nil, errors.WithStack(err)
+    }
+    rootHash = make([]byte, hLen)
+    if _, err := r.Read(rootHash); err != nil {
+        return 0, 0, 0, nil, errors.WithStack(err)
+    }
+    return filesize, blocksize, blockcount, rootHash, nil
 }
 
-func readIndex(r io.Reader, blocksize uint) (
-    i *index.ChecksumIndex,
-    checksumLookup filechecksum.ChecksumLookup,
-    blockCount uint,
-    err error,
-) {
-    generator := filechecksum.NewFileChecksumGenerator(blocksize)
+func readIndex(rd io.Reader, blocksize, blockcount uint, rootHash []byte) (*index.ChecksumIndex, filechecksum.ChecksumLookup, error) {
+    var (
+        generator    = filechecksum.NewFileChecksumGenerator(blocksize)
+        idx          *index.ChecksumIndex = nil
+        chksumLookup filechecksum.ChecksumLookup  = nil
+    )
 
-    readChunks, e := chunks.LoadChecksumsFromReader(
-        r,
+    readChunks, err := chunks.CountedLoadChecksumsFromReader(
+        rd,
+        blockcount,
         generator.GetWeakRollingHash().Size(),
         generator.GetStrongHash().Size(),
     )
-
-    err = e
-
     if err != nil {
-        return
+        return nil, nil, errors.WithStack(err)
     }
 
-    checksumLookup = chunks.StrongChecksumGetter(readChunks)
-    i = index.MakeChecksumIndex(readChunks)
-    blockCount = uint(len(readChunks))
+    chksumLookup = chunks.StrongChecksumGetter(readChunks)
+    idx = index.MakeChecksumIndex(readChunks)
+    cRootHash, err := idx.SequentialChecksumList().RootHash()
+    if err != nil {
+        return nil, nil, errors.WithStack(err)
+    }
+    if bytes.Compare(cRootHash, rootHash) != 0 {
+        return nil, nil, errors.Errorf("[ERR] mismatching integrity checksum")
+    }
 
-    return
+    return idx, chksumLookup, nil
 }
 
 func multithreadedMatching(
-    localFile *os.File,
-    idx *index.ChecksumIndex,
-    localFileSize,
-    matcherCount int64,
-    blocksize uint,
+    localFile     *os.File,
+    idx           *index.ChecksumIndex,
+    localFileSize int64,
+    matcherCount  int64,
+    blocksize     uint,
 ) (*comparer.MatchMerger, *comparer.Comparer) {
     // Note: Since not all sections of the file are equal in work
     // it would be better to divide things up into more sections and
