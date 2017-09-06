@@ -48,27 +48,25 @@ func Build(c *cli.Context) {
         } else {
             handleFileError(filename, err)
         }
-
         os.Exit(1)
     }
+    defer inputFile.Close()
 
     stat, err := inputFile.Stat()
     if err != nil {
         log.Error(errors.WithStack(err).Error())
         os.Exit(1)
     }
-    file_size := stat.Size()
-
-    defer inputFile.Close()
 
     var (
-        ext = filepath.Ext(filename)
+        file_size   = stat.Size()
+        ext         = filepath.Ext(filename)
         outfilePath = filename[:len(filename)-len(ext)] + ".gosync"
-        outBuf = new(bytes.Buffer)
+        outBuf      = new(bytes.Buffer)
     )
 
     start := time.Now()
-    rtcs, blockCount, err := generator.BuildSequentialAndRootChecksum(inputFile, outBuf)
+    rtcs, blockcount, err := generator.BuildSequentialAndRootChecksum(inputFile, outBuf)
     end := time.Now()
     if err != nil {
         log.Error(errors.WithMessage(err, "Error generating checksum from " + filename).Error())
@@ -86,7 +84,7 @@ func Build(c *cli.Context) {
         outputFile,
         file_size,
         blocksize,
-        blockCount,
+        blockcount,
         rtcs,
     ); err != nil {
         log.Error(errors.WithMessage(err, "Error getting file info:" + filename).Error())
@@ -108,6 +106,8 @@ func Build(c *cli.Context) {
         log.Error(errors.WithMessage(err, "Error getting file info:" + filename).Error())
         os.Exit(2)
     }
+
+    log.Infof("Filename %s/ BlockSize %v/ BlockCount %v/ RootChecksum %v", filename, blocksize, blockcount, rtcs)
 
     log.Infof("Index for %v file generated in %v (%v bytes/S)\n",
         inputFileInfo.Size(),
