@@ -114,7 +114,7 @@ func Patch(c *cli.Context) {
             repoList = append(repoList,
                 blockrepository.NewBlockRepositoryBase(
                     uint(rID),
-                    blocksources.NewRequesterWithTimeout(src, time.Duration(10) * time.Second),
+                    blocksources.NewRequesterWithTimeout(src, "PocketCluster/0.1.4 (OSX)", time.Duration(10) * time.Second),
                     resolver,
                     verifier))
         }
