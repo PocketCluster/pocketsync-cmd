@@ -94,7 +94,7 @@ func Patch(c *cli.Context) {
             scanner  *bufio.Scanner = bufio.NewScanner(refListReader)
             resolver = blockrepository.MakeKnownFileSizedBlockResolver(int64(blocksize), filesize)
             verifier = &filechecksum.HashVerifier{
-                Hash:                filechecksum.DefaultFileHashGenerator(),
+                Hash:                filechecksum.DefaultStrongHashGenerator(),
                 BlockSize:           uint(blocksize),
                 BlockChecksumGetter: index,
             }
