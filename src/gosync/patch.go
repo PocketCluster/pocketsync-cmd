@@ -1,105 +1,137 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"runtime"
+    "bufio"
+    "os"
+    "time"
 
-	gosync_main "github.com/Redundancy/go-sync"
-	"github.com/codegangsta/cli"
+    log "github.com/Sirupsen/logrus"
+    "github.com/pkg/errors"
+    "github.com/Redundancy/go-sync/blockrepository"
+    "github.com/Redundancy/go-sync/blocksources"
+    "github.com/Redundancy/go-sync/filechecksum"
+    "github.com/Redundancy/go-sync/patcher"
+    "github.com/Redundancy/go-sync/patcher/multisources"
+    "github.com/codegangsta/cli"
 )
 
-const usage = "gosync patch <localfile> <reference index> <reference source> [<output>]"
+const usage = "gosync patch <reference index> <reference repository list> <output>"
 
 func init() {
-	app.Commands = append(
-		app.Commands,
-		cli.Command{
-			Name:      "patch",
-			ShortName: "p",
-			Usage:     usage,
-			Description: `Recreate the reference source file, using an index and a local file that is believed to be similar.
+    app.Commands = append(
+        app.Commands,
+        cli.Command{
+            Name:      "patch",
+            ShortName: "p",
+            Usage:     usage,
+            Description: `Recreate the reference source file, using an index and a local file that is believed to be similar.
 The index should be produced by "gosync build".
 
-<reference index> is a .gosync file and may be a local, unc network path or http/https url
-<reference source> is corresponding target and may be a local, unc network path or http/https url
-<output> is optional. If not specified, the local file will be overwritten when done.`,
-			Action: Patch,
-			Flags: []cli.Flag{
-				cli.IntFlag{
-					Name:  "p",
-					Value: runtime.NumCPU(),
-					Usage: "The number of streams to use concurrently",
-				},
-			},
-		},
-	)
+<reference index> is a .gosync file and may be a local, unc network path or http/https url.
+<reference repository list> is corresponding repository list in .text file format.
+<output> is the local file will be overwritten when done.`,
+            Action: Patch,
+        },
+    )
 }
 
 // Patch a file
 func Patch(c *cli.Context) {
-	errorWrapper(c, func(c *cli.Context) error {
+    errorWrapper(c, func(c *cli.Context) error {
 
-		fmt.Fprintln(os.Stderr, "Starting patching process")
+        log.Println("Starting patching process")
+        if len(c.Args()) < 3 {
+            return errors.Errorf("Usage is \"%v\" (invalid number of arguments)", usage)
+        }
+        var (
+            refIndexName  = c.Args()[0]
+            refListName   = c.Args()[1]
+            outFileName   = c.Args()[2]
+        )
+        if len(refIndexName) == 0 {
+            return errors.Errorf("Usage is \"%v\" (invalid reference index filename)", usage)
+        }
+        if len(refListName) == 0 {
+            return errors.Errorf("Usage is \"%v\" (invalid reference repository list filename)", usage)
+        }
+        if len(outFileName) == 0 {
+            return errors.Errorf("Usage is \"%v\" (invalid output filename)", usage)
+        }
 
-		if l := len(c.Args()); l < 3 || l > 4 {
-			return fmt.Errorf(
-				"Usage is \"%v\" (invalid number of arguments)",
-				usage,
-			)
-		}
+        // index file
+        indexReader, err := os.Open(refIndexName)
+        if err != nil {
+            return errors.WithStack(err)
+        }
+        // read repository list
+        refListReader, err := os.Open(refListName)
+        if err != nil {
+            return errors.WithStack(err)
+        }
+        // otuput file
+        outFile, err := os.Create(outFileName)
+        if err != nil {
+            return errors.WithStack(err)
+        }
+        defer func() {
+            indexReader.Close()
+            refListReader.Close()
+            outFile.Close()
+        }()
 
-		localFilename := c.Args()[0]
-		summaryFile := c.Args()[1]
-		referencePath := c.Args()[2]
+        // read index & build checksum
+        filesize, blocksize, blockcount, rootHash, err := readHeadersAndCheck(indexReader)
+        if err != nil {
+            return errors.WithStack(err)
+        }
+        index, _, err := readIndex(indexReader, uint(blocksize), uint(blockcount), rootHash)
+        if err != nil {
+            return errors.WithStack(err)
+        }
 
-		outFilename := localFilename
-		if len(c.Args()) == 4 {
-			outFilename = c.Args()[3]
-		}
+        // read repository list
+        var (
+            scanner  *bufio.Scanner = bufio.NewScanner(refListReader)
+            resolver = blockrepository.MakeKnownFileSizedBlockResolver(int64(blocksize), filesize)
+            verifier = &filechecksum.HashVerifier{
+                Hash:                filechecksum.DefaultStrongHashGenerator(),
+                BlockSize:           uint(blocksize),
+                BlockChecksumGetter: index,
+            }
 
-		indexReader, e := os.Open(summaryFile)
-		if e != nil {
-			return e
-		}
-		defer indexReader.Close()
+            sourceList []string = nil
+            repoList   []patcher.BlockRepository = nil
+        )
+        for scanner.Scan() {
+            sourceList = append(sourceList, scanner.Text())
+        }
+        err = scanner.Err()
+        if err != nil {
+            return errors.WithStack(err)
+        }
+        for rID, src := range sourceList {
+            log.Infof("%v : %v", rID, src)
+            repoList = append(repoList,
+                blockrepository.NewBlockRepositoryBase(
+                    uint(rID),
+                    blocksources.NewRequesterWithTimeout(src, "PocketCluster/0.1.4 (OSX)", time.Duration(10) * time.Second),
+                    resolver,
+                    verifier))
+        }
+        msync, err := multisources.NewMultiSourcePatcher(outFile, repoList, index)
+        if err != nil {
+            return errors.WithStack(err)
+        }
 
-		_, _, _, filesize, blocksize, e := readHeadersAndCheck(
-			indexReader,
-			magicString,
-			majorVersion,
-		)
+        log.Infof("BlockSize %v/ BlockCount %v/ RootChecksum %v\nStart patching %v for the size of %v",blocksize, blockcount, rootHash, outFileName, filesize)
+        start := time.Now()
+        err = msync.Patch()
+        end := time.Now()
+        if err != nil {
+            return errors.WithStack(err)
+        }
+        log.Infof("Time duration %v | Data Rate %v/sec",end.Sub(start).Seconds(), int64(float64(filesize) / end.Sub(start).Seconds()))
 
-		index, checksumLookup, blockCount, err := readIndex(
-			indexReader,
-			uint(blocksize),
-		)
-
-		fs := &gosync_main.BasicSummary{
-			ChecksumIndex:  index,
-			ChecksumLookup: checksumLookup,
-			BlockCount:     blockCount,
-			BlockSize:      uint(blocksize),
-			FileSize:       filesize,
-		}
-
-		rsync, err := gosync_main.MakeRSync(
-			localFilename,
-			referencePath,
-			outFilename,
-			fs,
-		)
-
-		if err != nil {
-			return err
-		}
-
-		err = rsync.Patch()
-
-		if err != nil {
-			return err
-		}
-
-		return rsync.Close()
-	})
+        return errors.WithStack(msync.Close())
+    })
 }
