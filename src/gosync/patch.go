@@ -124,10 +124,13 @@ func Patch(c *cli.Context) {
         }
 
         log.Infof("BlockSize %v/ BlockCount %v/ RootChecksum %v\nStart patching %v for the size of %v",blocksize, blockcount, rootHash, outFileName, filesize)
+        start := time.Now()
         err = msync.Patch()
+        end := time.Now()
         if err != nil {
             return errors.WithStack(err)
         }
+        log.Infof("Time duration %v | Data Rate %v/sec",end.Sub(start).Seconds(), int64(float64(filesize) / end.Sub(start).Seconds()))
 
         return errors.WithStack(msync.Close())
     })
