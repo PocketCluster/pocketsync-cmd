@@ -84,7 +84,7 @@ func Patch(c *cli.Context) {
         if err != nil {
             return errors.WithStack(err)
         }
-        index, checksumLookup, err := readIndex(indexReader, uint(blocksize), uint(blockcount), rootHash)
+        index, _, err := readIndex(indexReader, uint(blocksize), uint(blockcount), rootHash)
         if err != nil {
             return errors.WithStack(err)
         }
@@ -96,7 +96,7 @@ func Patch(c *cli.Context) {
             verifier = &filechecksum.HashVerifier{
                 Hash:                filechecksum.DefaultFileHashGenerator(),
                 BlockSize:           uint(blocksize),
-                BlockChecksumGetter: checksumLookup,
+                BlockChecksumGetter: index,
             }
 
             sourceList []string = nil
