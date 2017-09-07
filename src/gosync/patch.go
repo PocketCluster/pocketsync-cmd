@@ -123,7 +123,7 @@ func Patch(c *cli.Context) {
             return errors.WithStack(err)
         }
 
-        log.Infof("Start patching %v for the size of %v", outFileName, filesize)
+        log.Infof("BlockSize %v/ BlockCount %v/ RootChecksum %v\nStart patching %v for the size of %v",blocksize, blockcount, rootHash, outFileName, filesize)
         err = msync.Patch()
         if err != nil {
             return errors.WithStack(err)
