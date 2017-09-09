@@ -2,6 +2,8 @@ package main
 
 import (
     "bufio"
+    "fmt"
+    "io"
     "os"
     "time"
 
@@ -12,6 +14,7 @@ import (
     "github.com/Redundancy/go-sync/filechecksum"
     "github.com/Redundancy/go-sync/patcher"
     "github.com/Redundancy/go-sync/patcher/multisources"
+    "github.com/Redundancy/go-sync/showpipe"
     "github.com/codegangsta/cli"
 )
 
@@ -114,16 +117,32 @@ func Patch(c *cli.Context) {
             repoList = append(repoList,
                 blockrepository.NewBlockRepositoryBase(
                     uint(rID),
-                    blocksources.NewRequesterWithTimeout(src, "PocketCluster/0.1.4 (OSX)", time.Duration(10) * time.Second),
+                    blocksources.NewRequesterWithTimeout(src, "PocketCluster/0.1.4 (OSX)", false, time.Duration(10) * time.Second),
                     resolver,
                     verifier))
         }
-        msync, err := multisources.NewMultiSourcePatcher(outFile, repoList, index)
+
+        pipeReader, pipeWriter, pipeReporter := showpipe.PipeWithReport(uint64(filesize))
+        defer func() {
+            pipeReader.Close()
+            pipeWriter.Close()
+        }()
+        go func() {
+            for rpt := range pipeReporter {
+                fmt.Fprint(os.Stdout, fmt.Sprintf("Recieved %v | Progress %.1f | Speed %.1f\r", rpt.Received, (rpt.DonePercent * 100.0), (rpt.Speed / float32(1024 * 1024))))
+            }
+        }()
+        msync, err := multisources.NewMultiSourcePatcher(pipeWriter, repoList, index)
         if err != nil {
             return errors.WithStack(err)
         }
-
         log.Infof("BlockSize %v/ BlockCount %v/ RootChecksum %v\nStart patching %v for the size of %v",blocksize, blockcount, rootHash, outFileName, filesize)
+        go func() {
+            _, err := io.Copy(outFile, pipeReader)
+            if err != nil {
+                log.Infof("%v", err.Error())
+            }
+        }()
         start := time.Now()
         err = msync.Patch()
         end := time.Now()
