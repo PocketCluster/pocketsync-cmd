@@ -129,7 +129,7 @@ func Patch(c *cli.Context) {
         }()
         go func() {
             for rpt := range pipeReporter {
-                fmt.Fprint(os.Stdout, fmt.Sprintf("Recieved %v | Progress %.1f | Speed %.1f\r", rpt.Accumulated, (rpt.DonePercent * 100.0), (rpt.Speed / float32(1024 * 1024))))
+                fmt.Fprint(os.Stdout, fmt.Sprintf("Recieved %v | Progress %.1f | Speed %.1f\r", rpt.Received, (rpt.DonePercent * 100.0), (rpt.Speed / float32(1024 * 1024))))
             }
         }()
         msync, err := multisources.NewMultiSourcePatcher(pipeWriter, repoList, index)
