@@ -19,7 +19,7 @@ import (
 var app = cli.NewApp()
 
 func main() {
-    app.Name = "gosync"
+    app.Name = "pcsync"
     app.Usage = "Build indexes, patches, patch files"
     app.Flags = []cli.Flag{
         cli.BoolFlag{
