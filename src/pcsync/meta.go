@@ -41,15 +41,15 @@ func Meta(c *cli.Context) {
             hasher = filechecksum.DefaultStrongHashGenerator()
         )
         // get the exact path
-        absPathPath, err := filepath.Abs(metaFileName)
+        absFilePath, err := filepath.Abs(metaFileName)
         if err != nil {
-            handleFileError(absPathPath, err)
+            handleFileError(absFilePath, err)
             return err
         }
         // get the data
-        metaData, err := ioutil.ReadFile(absPathPath)
+        metaData, err := ioutil.ReadFile(absFilePath)
         if err != nil {
-            handleFileError(absPathPath, err)
+            handleFileError(absFilePath, err)
             return err
         }
 

@@ -31,7 +31,7 @@ func init() {
                 },
                 cli.BoolFlag{
                     Name:  "quite",
-                    Usage: "The block size to use for the gosync file",
+                    Usage: "Supress verbose log",
                 },
             },
         },
@@ -42,40 +42,46 @@ func Build(c *cli.Context) {
     log.SetLevel(log.DebugLevel)
     errorWrapper(c, func(c *cli.Context) error {
         var (
-            filename  = c.Args()[0]
-            blocksize = uint32(c.Int("blocksize"))
-            quite     = bool(c.Bool("quite"))
-            generator = filechecksum.NewFileChecksumGenerator(uint(blocksize))
+            filename    = c.Args()[0]
+            outfilePath = filename[:len(filename)-len(filepath.Ext(filename))] + ".pcsync"
+            blocksize   = uint32(c.Int("blocksize"))
+            quite       = bool(c.Bool("quite"))
+
+            generator   = filechecksum.NewFileChecksumGenerator(uint(blocksize))
+            outBuf      = new(bytes.Buffer)
         )
 
         absInputPath, err := filepath.Abs(filename)
         if err != nil {
-            handleFileError(absInputPath, err)
+            if !quite {
+                handleFileError(absInputPath, err)
+            }
             return err
         }
         inputFile, err := os.Open(absInputPath)
         if err != nil {
             if !quite {
-                log.Error(errors.WithStack(err).Error())
+                handleFileError(absInputPath, err)
             }
             return err
         }
         defer inputFile.Close()
 
-        stat, err := inputFile.Stat()
+        absOutputPath, err := filepath.Abs(outfilePath)
         if err != nil {
             if !quite {
-                log.Error(errors.WithStack(err).Error())
+                handleFileError(absOutputPath, err)
             }
             return err
         }
-
-        var (
-            file_size   = stat.Size()
-            ext         = filepath.Ext(filename)
-            outfilePath = filename[:len(filename)-len(ext)] + ".pcsync"
-            outBuf      = new(bytes.Buffer)
-        )
+        outputFile, err := os.Create(absOutputPath)
+        if err != nil {
+            if !quite {
+                handleFileError(absOutputPath, err)
+            }
+            return err
+        }
+        defer outputFile.Close()
 
         start := time.Now()
         rtcs, blockcount, err := generator.BuildSequentialAndRootChecksum(inputFile, outBuf)
@@ -87,14 +93,14 @@ func Build(c *cli.Context) {
             return err
         }
 
-        outputFile, err := os.Create(outfilePath)
+        stat, err := inputFile.Stat()
         if err != nil {
             if !quite {
-                handleFileError(outfilePath, err)
+                log.Error(errors.WithStack(err).Error())
             }
             return err
         }
-        defer outputFile.Close()
+        file_size := stat.Size()
 
         if err = writeHeaders(
             outputFile,
@@ -123,23 +129,14 @@ func Build(c *cli.Context) {
             return err
         }
 
-        inputFileInfo, err := os.Stat(filename)
-        if err != nil {
-            if !quite {
-                log.Error(errors.WithMessage(err, "Error getting file info:" + filename).Error())
-            }
-            return err
-        }
-
         if !quite {
-            log.Infof("Filename %s | BlockSize %v | BlockCount %v | RootChecksum %v | Index for %v file generated in %v (%v bytes/S)",
+            log.Infof("Filename %s | BlockSize %v | BlockCount %v | RootChecksum %v | Index for %v file generated in %v",
                 filename,
                 blocksize,
                 blockcount,
                 rtcs,
-                inputFileInfo.Size(),
-                end.Sub(start),
-                float64(inputFileInfo.Size())/end.Sub(start).Seconds())
+                file_size,
+                end.Sub(start))
         } else {
             fmt.Fprint(os.Stdout, base64.URLEncoding.EncodeToString(rtcs))
         }
