@@ -2,6 +2,8 @@ package main
 
 import (
     "bytes"
+    "encoding/base64"
+    "fmt"
     "os"
     "path/filepath"
     "time"
@@ -27,6 +29,10 @@ func init() {
                     Value: gosync.PocketSyncDefaultBlockSize,
                     Usage: "The block size to use for the gosync file",
                 },
+                cli.BoolFlag{
+                    Name:  "quite",
+                    Usage: "The block size to use for the gosync file",
+                },
             },
         },
     )
@@ -37,6 +43,7 @@ func Build(c *cli.Context) {
     var (
         filename  = c.Args()[0]
         blocksize = uint32(c.Int("blocksize"))
+        quite     = bool(c.Bool("quite"))
         generator = filechecksum.NewFileChecksumGenerator(uint(blocksize))
     )
 
@@ -69,7 +76,9 @@ func Build(c *cli.Context) {
     rtcs, blockcount, err := generator.BuildSequentialAndRootChecksum(inputFile, outBuf)
     end := time.Now()
     if err != nil {
-        log.Error(errors.WithMessage(err, "Error generating checksum from " + filename).Error())
+        if !quite {
+            log.Error(errors.WithMessage(err, "Error generating checksum from " + filename).Error())
+        }
         os.Exit(1)
     }
 
@@ -93,7 +102,9 @@ func Build(c *cli.Context) {
 
     wrLen, err := outputFile.Write(outBuf.Bytes())
     if err != nil {
-        log.Error(errors.WithMessage(err, "Error saving checksum :" + filename).Error())
+        if !quite {
+            log.Error(errors.WithMessage(err, "Error saving checksum :" + filename).Error())
+        }
         os.Exit(2)
     }
     if wrLen != outBuf.Len() {
@@ -103,14 +114,22 @@ func Build(c *cli.Context) {
 
     inputFileInfo, err := os.Stat(filename)
     if err != nil {
-        log.Error(errors.WithMessage(err, "Error getting file info:" + filename).Error())
+        if !quite {
+            log.Error(errors.WithMessage(err, "Error getting file info:" + filename).Error())
+        }
         os.Exit(2)
     }
 
-    log.Infof("Filename %s/ BlockSize %v/ BlockCount %v/ RootChecksum %v", filename, blocksize, blockcount, rtcs)
-
-    log.Infof("Index for %v file generated in %v (%v bytes/S)\n",
-        inputFileInfo.Size(),
-        end.Sub(start),
-        float64(inputFileInfo.Size())/end.Sub(start).Seconds())
+    if !quite {
+        log.Infof("Filename %s | BlockSize %v | BlockCount %v | RootChecksum %v | Index for %v file generated in %v (%v bytes/S)",
+            filename,
+            blocksize,
+            blockcount,
+            rtcs,
+            inputFileInfo.Size(),
+            end.Sub(start),
+            float64(inputFileInfo.Size())/end.Sub(start).Seconds())
+    } else {
+        fmt.Fprint(os.Stdout, base64.URLEncoding.EncodeToString(rtcs))
+    }
 }
