@@ -19,7 +19,7 @@ func init() {
         cli.Command{
             Name:      "build",
             ShortName: "b",
-            Usage:     "build a .gosync file for a file",
+            Usage:     "build a .pcsync file for a file",
             Action:    Build,
             Flags: []cli.Flag{
                 cli.IntFlag{
@@ -61,7 +61,7 @@ func Build(c *cli.Context) {
     var (
         file_size   = stat.Size()
         ext         = filepath.Ext(filename)
-        outfilePath = filename[:len(filename)-len(ext)] + ".gosync"
+        outfilePath = filename[:len(filename)-len(ext)] + ".pcsync"
         outBuf      = new(bytes.Buffer)
     )
 
