@@ -97,7 +97,7 @@ func Pkglist(c *cli.Context) {
         pkgModel.CoreImageChksum = coreChksum
         pkgModel.NodeImageChksum = nodeChksum
 
-        err = json.NewEncoder(outputFile).Encode(pkgModel)
+        err = json.NewEncoder(outputFile).Encode([]*model.Package{pkgModel})
         if err != nil {
             if !quite {
                 log.Errorf(errors.WithStack(err).Error())

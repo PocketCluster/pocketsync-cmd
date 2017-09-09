@@ -33,6 +33,10 @@ func init() {
                     Name:  "quite",
                     Usage: "Supress verbose log",
                 },
+                cli.StringFlag{
+                    Name:  "output-dir",
+                    Usage: "output directory specified",
+                },
             },
         },
     )
@@ -45,7 +49,8 @@ func Build(c *cli.Context) {
             filename    = c.Args()[0]
             outfilePath = filename[:len(filename)-len(filepath.Ext(filename))] + ".pcsync"
             blocksize   = uint32(c.Int("blocksize"))
-            quite       = bool(c.Bool("quite"))
+            quite       = c.Bool("quite")
+            outputDir   = c.String("output-dir")
 
             generator   = filechecksum.NewFileChecksumGenerator(uint(blocksize))
             outBuf      = new(bytes.Buffer)
@@ -67,6 +72,10 @@ func Build(c *cli.Context) {
         }
         defer inputFile.Close()
 
+        // if output is not specified...
+        if len(outputDir) != 0 {
+            outfilePath = filepath.Join(filepath.Dir(outputDir), filepath.Base(outfilePath))
+        }
         absOutputPath, err := filepath.Abs(outfilePath)
         if err != nil {
             if !quite {
