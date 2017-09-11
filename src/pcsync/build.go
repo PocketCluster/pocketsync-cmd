@@ -13,6 +13,7 @@ import (
     gosync "github.com/Redundancy/go-sync"
     "github.com/Redundancy/go-sync/filechecksum"
     "github.com/codegangsta/cli"
+    "strings"
 )
 
 func init() {
@@ -47,7 +48,7 @@ func Build(c *cli.Context) {
     errorWrapper(c, func(c *cli.Context) error {
         var (
             filename    = c.Args()[0]
-            outfilePath = filename[:len(filename)-len(filepath.Ext(filename))] + ".pcsync"
+            //outfilePath = filename[:len(filename)-len(filepath.Ext(filename))] + ".pcsync"
             blocksize   = uint32(c.Int("blocksize"))
             quite       = c.Bool("quite")
             outputDir   = c.String("output-dir")
@@ -73,6 +74,7 @@ func Build(c *cli.Context) {
         defer inputFile.Close()
 
         // if output is not specified...
+        outfilePath := strings.Split(filepath.Base(absInputPath), ".")[0] + ".pcsync"
         if len(outputDir) != 0 {
             outfilePath = filepath.Join(filepath.Dir(outputDir), filepath.Base(outfilePath))
         }
