@@ -9,13 +9,13 @@ import (
 
     log "github.com/Sirupsen/logrus"
     "github.com/pkg/errors"
+    "github.com/urfave/cli"
     "github.com/Redundancy/go-sync/blockrepository"
     "github.com/Redundancy/go-sync/blocksources"
     "github.com/Redundancy/go-sync/filechecksum"
     "github.com/Redundancy/go-sync/patcher"
     "github.com/Redundancy/go-sync/patcher/multisources"
     "github.com/Redundancy/go-sync/showpipe"
-    "github.com/codegangsta/cli"
 )
 
 const usage = "gosync patch <reference index> <reference repository list> <output>"

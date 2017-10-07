@@ -7,8 +7,8 @@ import (
 
     log "github.com/Sirupsen/logrus"
     "github.com/pkg/errors"
+    "github.com/urfave/cli"
     "github.com/Redundancy/go-sync/merkle"
-    "github.com/codegangsta/cli"
 )
 
 const (

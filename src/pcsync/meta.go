@@ -9,8 +9,8 @@ import (
 
     log "github.com/Sirupsen/logrus"
     "github.com/pkg/errors"
+    "github.com/urfave/cli"
     "github.com/Redundancy/go-sync/filechecksum"
-    "github.com/codegangsta/cli"
 )
 
 const (

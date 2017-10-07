@@ -6,14 +6,14 @@ import (
     "fmt"
     "os"
     "path/filepath"
+    "strings"
     "time"
 
     log "github.com/Sirupsen/logrus"
     "github.com/pkg/errors"
+    "github.com/urfave/cli"
     gosync "github.com/Redundancy/go-sync"
     "github.com/Redundancy/go-sync/filechecksum"
-    "github.com/codegangsta/cli"
-    "strings"
 )
 
 func init() {

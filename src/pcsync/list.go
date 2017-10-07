@@ -8,7 +8,7 @@ import (
 
     log "github.com/Sirupsen/logrus"
     "github.com/pkg/errors"
-    "github.com/codegangsta/cli"
+    "github.com/urfave/cli"
     "github.com/stkim1/pc-core/model"
 )
 
