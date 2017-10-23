@@ -27,63 +27,60 @@ func init() {
     )
 }
 
-func Repolist(c *cli.Context) {
+func Repolist(c *cli.Context) error {
     log.SetLevel(log.DebugLevel)
 
-    errorWrapper(c, func(c *cli.Context) error {
-        if len(c.Args()) < 2 {
-            return errors.Errorf("Usage is \"%v\" (invalid number of arguments)", repoUsage)
-        }
+    if len(c.Args()) < 2 {
+        return errors.Errorf("Usage is \"%v\" (invalid number of arguments)", repoUsage)
+    }
 
-        var (
-            srcList    string = c.Args()[0]
-            listOut    string = c.Args()[1]
-        )
+    var (
+        srcList    string = c.Args()[0]
+        listOut    string = c.Args()[1]
+    )
 
-        absSourcePath, err := filepath.Abs(srcList)
-        if err != nil {
-            handleFileError(absSourcePath, err)
-            return err
-        }
-        refListReader, err := os.Open(absSourcePath)
-        if err != nil {
-            handleFileError(absSourcePath, err)
-            return err
-        }
-        defer refListReader.Close()
+    absSourcePath, err := filepath.Abs(srcList)
+    if err != nil {
+        handleFileError(absSourcePath, err)
+        return errors.WithStack(err)
+    }
+    refListReader, err := os.Open(absSourcePath)
+    if err != nil {
+        handleFileError(absSourcePath, err)
+        return errors.WithStack(err)
+    }
+    defer refListReader.Close()
 
-        absOutputPath, err := filepath.Abs(listOut)
-        if err != nil {
-            handleFileError(absOutputPath, err)
-            return err
-        }
-        outputFile, err := os.Create(absOutputPath)
-        if err != nil {
-            handleFileError(absOutputPath, err)
-            return err
-        }
-        defer outputFile.Close()
+    absOutputPath, err := filepath.Abs(listOut)
+    if err != nil {
+        handleFileError(absOutputPath, err)
+        return errors.WithStack(err)
+    }
+    outputFile, err := os.Create(absOutputPath)
+    if err != nil {
+        handleFileError(absOutputPath, err)
+        return errors.WithStack(err)
+    }
+    defer outputFile.Close()
 
-        // read repository list
-        var (
-            scanner  *bufio.Scanner = bufio.NewScanner(refListReader)
-            sourceList []string = nil
-        )
-        for scanner.Scan() {
-            sourceList = append(sourceList, scanner.Text())
-        }
-        err = scanner.Err()
-        if err != nil {
-            return errors.WithStack(err)
-        }
+    // read repository list
+    var (
+        scanner  *bufio.Scanner = bufio.NewScanner(refListReader)
+        sourceList []string = nil
+    )
+    for scanner.Scan() {
+        sourceList = append(sourceList, scanner.Text())
+    }
+    err = scanner.Err()
+    if err != nil {
+        return errors.WithStack(err)
+    }
 
-        err = json.NewEncoder(outputFile).Encode(sourceList)
-        if err != nil {
-            log.Errorf(errors.WithStack(err).Error())
-            return err
-        }
+    err = json.NewEncoder(outputFile).Encode(sourceList)
+    if err != nil {
+        return errors.WithStack(err)
+    }
 
-        return nil
-    })
+    return nil
 }
 

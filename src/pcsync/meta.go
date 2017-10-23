@@ -29,32 +29,30 @@ func init() {
     )
 }
 
-func Meta(c *cli.Context) {
+func Meta(c *cli.Context) error {
     log.SetLevel(log.DebugLevel)
 
-    errorWrapper(c, func(c *cli.Context) error {
-        if len(c.Args()) < 1 {
-            return errors.Errorf("Usage is \"%v\" (invalid number of arguments)", metaUsage)
-        }
-        var (
-            metaFileName  = c.Args()[0]
-            hasher = filechecksum.DefaultStrongHashGenerator()
-        )
-        // get the exact path
-        absFilePath, err := filepath.Abs(metaFileName)
-        if err != nil {
-            handleFileError(absFilePath, err)
-            return err
-        }
-        // get the data
-        metaData, err := ioutil.ReadFile(absFilePath)
-        if err != nil {
-            handleFileError(absFilePath, err)
-            return err
-        }
+    if len(c.Args()) < 1 {
+        return errors.Errorf("Usage is \"%v\" (invalid number of arguments)", metaUsage)
+    }
+    var (
+        metaFileName  = c.Args()[0]
+        hasher = filechecksum.DefaultStrongHashGenerator()
+    )
+    // get the exact path
+    absFilePath, err := filepath.Abs(metaFileName)
+    if err != nil {
+        handleFileError(absFilePath, err)
+        return err
+    }
+    // get the data
+    metaData, err := ioutil.ReadFile(absFilePath)
+    if err != nil {
+        handleFileError(absFilePath, err)
+        return err
+    }
 
-        hasher.Write(metaData)
-        fmt.Fprint(os.Stdout, base64.URLEncoding.EncodeToString(hasher.Sum(nil)))
-        return nil
-    })
+    hasher.Write(metaData)
+    fmt.Fprint(os.Stdout, base64.URLEncoding.EncodeToString(hasher.Sum(nil)))
+    return nil
 }

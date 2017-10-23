@@ -1,8 +1,6 @@
 package main
 
 import (
-    "fmt"
-    "os"
     "runtime"
     "time"
 
@@ -31,44 +29,42 @@ func init() {
     )
 }
 
-func Diff(c *cli.Context) {
+func Diff(c *cli.Context) error {
     var (
         localFilename     string = c.Args()[0]
         referenceFilename string = c.Args()[1]
         startTime      time.Time = time.Now()
     )
+    log.SetLevel(log.DebugLevel)
 
     localFile := openFileAndHandleError(localFilename)
     if localFile == nil {
-        os.Exit(1)
+        return errors.Errorf("unable to open local file %v", localFilename)
     }
     defer localFile.Close()
 
     referenceFile := openFileAndHandleError(referenceFilename)
     if referenceFile == nil {
-        os.Exit(1)
+        return errors.Errorf("unable to open reference file %v", referenceFilename)
     }
     defer referenceFile.Close()
 
     _, blocksize, blockcount, rootHash, err := readHeadersAndCheck(referenceFile)
     if err != nil {
-        log.Errorf(errors.WithMessage(err, "Error loading index").Error())
-        os.Exit(1)
+        return errors.WithMessage(err, "Error loading index")
     }
 
-    log.Println("Blocksize: ", blocksize)
+    log.Infof("Blocksize: %v", blocksize)
     index, _, err := readIndex(referenceFile, uint(blocksize), uint(blockcount), rootHash)
     referenceFile.Close()
     if err != nil {
-        log.Errorf(errors.WithStack(err).Error())
-        os.Exit(1)
+        return errors.WithStack(err)
     }
 
-    log.Println("Weak hash count:", index.WeakCount())
+    log.Infof("Weak hash count: %v", index.WeakCount())
     fi, err := localFile.Stat()
     if err != nil {
-        log.Errorf(errors.WithMessage(err, "Could not get info on file:").Error())
-        os.Exit(1)
+        return errors.WithMessage(err, "Could not get info on file:")
     }
 
     var (
@@ -90,7 +86,7 @@ func Diff(c *cli.Context) {
 
     mergedBlocks := merger.GetMergedBlocks()
 
-    fmt.Println("\nMatched:")
+    log.Infof("\nMatched:")
     totalMatchingSize := uint64(0)
     matchedBlockCountAfterMerging := uint(0)
 
@@ -99,31 +95,31 @@ func Diff(c *cli.Context) {
         matchedBlockCountAfterMerging += b.EndBlock - b.StartBlock + 1
     }
 
-    fmt.Println("Comparisons:", compare.Comparisons)
-    fmt.Println("Weak hash hits:", compare.WeakHashHits)
+    log.Infof("Comparisons: %v", compare.Comparisons)
+    log.Infof("Weak hash hits: %v", compare.WeakHashHits)
 
     if compare.Comparisons > 0 {
-        fmt.Printf(
+        log.Infof(
             "Weak hit rate: %.2f%%\n",
             100.0*float64(compare.WeakHashHits)/float64(compare.Comparisons),
         )
     }
 
-    fmt.Println("Strong hash hits:", compare.StrongHashHits)
+    log.Infof("Strong hash hits:", compare.StrongHashHits)
     if compare.WeakHashHits > 0 {
-        fmt.Printf(
+        log.Infof(
             "Weak hash error rate: %.2f%%\n",
             100.0*float64(compare.WeakHashHits-compare.StrongHashHits)/float64(compare.WeakHashHits),
         )
     }
 
-    fmt.Println("Total matched bytes:", totalMatchingSize)
-    fmt.Println("Total matched blocks:", matchedBlockCountAfterMerging)
+    log.Infof("Total matched bytes: %v", totalMatchingSize)
+    log.Infof("Total matched blocks: %v", matchedBlockCountAfterMerging)
 
     // TODO: GetMissingBlocks uses the highest index, not the count, this can be pretty confusing
     // Should clean up this interface to avoid that
     missing := mergedBlocks.GetMissingBlocks(uint(index.BlockCount) - 1)
-    fmt.Println("Index blocks:", index.BlockCount)
+    log.Infof("Index blocks: %v", index.BlockCount)
 
     totalMissingSize := uint64(0)
     for _, b := range missing {
@@ -131,6 +127,7 @@ func Diff(c *cli.Context) {
         totalMissingSize += uint64(b.EndBlock-b.StartBlock+1) * uint64(blocksize)
     }
 
-    fmt.Println("Approximate missing bytes:", totalMissingSize)
-    fmt.Println("Time taken:", time.Now().Sub(startTime))
+    log.Infof("Approximate missing bytes: %v", totalMissingSize)
+    log.Infof("Time taken: %v", time.Now().Sub(startTime))
+    return nil
 }

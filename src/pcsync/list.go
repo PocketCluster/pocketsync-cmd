@@ -28,64 +28,61 @@ func init() {
     )
 }
 
-func Pkglist(c *cli.Context) {
+func Pkglist(c *cli.Context) error {
     log.SetLevel(log.DebugLevel)
 
-    errorWrapper(c, func(c *cli.Context) error {
-        if len(c.Args()) < 6 {
-            return errors.Errorf("Usage is \"%v\" (invalid number of arguments)", listUsage)
-        }
+    if len(c.Args()) < 6 {
+        return errors.Errorf("Usage is \"%v\" (invalid number of arguments)", listUsage)
+    }
 
-        var (
-            coreChksum string         = c.Args()[0]
-            nodeChksum string         = c.Args()[1]
-            metaChksum string         = c.Args()[2]
-            pkgChksum  string         = c.Args()[3]
-            templateIn string         = c.Args()[4]
-            listOut    string         = c.Args()[5]
-            pkgModel   *model.Package = &model.Package{}
-        )
+    var (
+        coreChksum string         = c.Args()[0]
+        nodeChksum string         = c.Args()[1]
+        metaChksum string         = c.Args()[2]
+        pkgChksum  string         = c.Args()[3]
+        templateIn string         = c.Args()[4]
+        listOut    string         = c.Args()[5]
+        pkgModel   *model.Package = &model.Package{}
+    )
 
-        absTemplPath, err := filepath.Abs(templateIn)
-        if err != nil {
-            handleFileError(absTemplPath, err)
-            return err
-        }
-        tmplData, err := ioutil.ReadFile(absTemplPath)
-        if err != nil {
-            handleFileError(absTemplPath, err)
-            return err
-        }
+    absTemplPath, err := filepath.Abs(templateIn)
+    if err != nil {
+        handleFileError(absTemplPath, err)
+        return err
+    }
+    tmplData, err := ioutil.ReadFile(absTemplPath)
+    if err != nil {
+        handleFileError(absTemplPath, err)
+        return errors.WithStack(err)
+    }
 
-        absOutputPath, err := filepath.Abs(listOut)
-        if err != nil {
-            handleFileError(absOutputPath, err)
-            return err
-        }
-        outputFile, err := os.Create(absOutputPath)
-        if err != nil {
-            handleFileError(absOutputPath, err)
-            return err
-        }
-        defer outputFile.Close()
+    absOutputPath, err := filepath.Abs(listOut)
+    if err != nil {
+        handleFileError(absOutputPath, err)
+        return errors.WithStack(err)
+    }
+    outputFile, err := os.Create(absOutputPath)
+    if err != nil {
+        handleFileError(absOutputPath, err)
+        return errors.WithStack(err)
+    }
+    defer outputFile.Close()
 
-        err = json.Unmarshal(tmplData, pkgModel)
-        if err != nil {
-            log.Errorf(errors.WithStack(err).Error())
-            return err
-        }
+    err = json.Unmarshal(tmplData, pkgModel)
+    if err != nil {
+        log.Errorf(errors.WithStack(err).Error())
+        return errors.WithStack(err)
+    }
 
-        pkgModel.PkgChksum = pkgChksum
-        pkgModel.MetaChksum = metaChksum
-        pkgModel.CoreImageChksum = coreChksum
-        pkgModel.NodeImageChksum = nodeChksum
+    pkgModel.PkgChksum = pkgChksum
+    pkgModel.MetaChksum = metaChksum
+    pkgModel.CoreImageChksum = coreChksum
+    pkgModel.NodeImageChksum = nodeChksum
 
-        err = json.NewEncoder(outputFile).Encode([]*model.Package{pkgModel})
-        if err != nil {
-            log.Errorf(errors.WithStack(err).Error())
-            return err
-        }
+    err = json.NewEncoder(outputFile).Encode([]*model.Package{pkgModel})
+    if err != nil {
+        return errors.WithStack(err)
+    }
 
-        return nil
-    })
+    return nil
 }
