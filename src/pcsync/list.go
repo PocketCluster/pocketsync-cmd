@@ -37,12 +37,12 @@ func Pkglist(c *cli.Context) {
         }
 
         var (
-            coreChksum string = c.Args()[0]
-            nodeChksum string = c.Args()[1]
-            metaChksum string = c.Args()[2]
-            pkgVer     string = c.Args()[3]
-            templateIn string = c.Args()[4]
-            listOut    string = c.Args()[5]
+            coreChksum string         = c.Args()[0]
+            nodeChksum string         = c.Args()[1]
+            metaChksum string         = c.Args()[2]
+            pkgChksum  string         = c.Args()[3]
+            templateIn string         = c.Args()[4]
+            listOut    string         = c.Args()[5]
             pkgModel   *model.Package = &model.Package{}
         )
 
@@ -75,7 +75,7 @@ func Pkglist(c *cli.Context) {
             return err
         }
 
-        pkgModel.PkgVer = pkgVer
+        pkgModel.PkgChksum = pkgChksum
         pkgModel.MetaChksum = metaChksum
         pkgModel.CoreImageChksum = coreChksum
         pkgModel.NodeImageChksum = nodeChksum
