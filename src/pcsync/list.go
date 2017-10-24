@@ -13,7 +13,7 @@ import (
 )
 
 const (
-    listUsage string = "Package list generation. 'pcsync pkglist <core chksum> <core size> <node chksum> <node size> <meta chksum> <pkg ver> <list template input> <list output>'. *use in build script*"
+    listUsage string = "Package list generation. 'pcsync pkglist <core size> <core chksum> <node size> <node chksum> <meta chksum> <pkg ver> <list template input> <list output>'. *use in build script*"
 )
 
 func init() {
@@ -36,10 +36,10 @@ func Pkglist(c *cli.Context) error {
     }
 
     var (
-        coreChksum  = c.Args()[0]
-        coreImgSize = c.Args()[1]
-        nodeChksum  = c.Args()[2]
-        nodeImgSize = c.Args()[3]
+        coreImgSize = c.Args()[0]
+        coreChksum  = c.Args()[1]
+        nodeImgSize = c.Args()[2]
+        nodeChksum  = c.Args()[3]
         metaChksum  = c.Args()[4]
         pkgChksum   = c.Args()[5]
         templateIn  = c.Args()[6]
@@ -78,10 +78,10 @@ func Pkglist(c *cli.Context) error {
 
     pkgModel.PkgChksum       = pkgChksum
     pkgModel.MetaChksum      = metaChksum
-    pkgModel.CoreImageChksum = coreChksum
     pkgModel.CoreImageSize   = coreImgSize
-    pkgModel.NodeImageChksum = nodeChksum
+    pkgModel.CoreImageChksum = coreChksum
     pkgModel.NodeImageSize   = nodeImgSize
+    pkgModel.NodeImageChksum = nodeChksum
 
     err = json.NewEncoder(outputFile).Encode([]*model.Package{pkgModel})
     if err != nil {
