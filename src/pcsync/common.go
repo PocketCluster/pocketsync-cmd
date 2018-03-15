@@ -11,13 +11,13 @@ import (
 
     log "github.com/Sirupsen/logrus"
     "github.com/pkg/errors"
+    "github.com/urfave/cli"
     gosync "github.com/Redundancy/go-sync"
     "github.com/Redundancy/go-sync/chunks"
     "github.com/Redundancy/go-sync/comparer"
     "github.com/Redundancy/go-sync/filechecksum"
     "github.com/Redundancy/go-sync/index"
     "github.com/Redundancy/go-sync/patcher"
-    "github.com/codegangsta/cli"
 )
 
 const (

@@ -12,14 +12,14 @@ import (
     "os"
     "runtime"
 
-    "github.com/codegangsta/cli"
+    "github.com/urfave/cli"
     "github.com/Redundancy/go-sync"
 )
 
 var app = cli.NewApp()
 
 func main() {
-    app.Name = "gosync"
+    app.Name = "pcsync"
     app.Usage = "Build indexes, patches, patch files"
     app.Flags = []cli.Flag{
         cli.BoolFlag{
